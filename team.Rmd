@@ -1,0 +1,213 @@
+---
+title: "ds202_lab4"
+author: "Dongming Li"
+date: "10/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Part one: Cleaning data
+```{r message=FALSE,warning=FALSE}
+library(readxl)
+library(readxl)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+defense <- read_excel("cyclonesFootball2019.xlsx", sheet='Defensive')
+offense <- read_excel("cyclonesFootball2019.xlsx", sheet='Offensive')
+biography <- read_excel("cyclonesFootball2019.xlsx", sheet='Biography')
+
+defense2018 <- read_excel("cyclonesFootball2018.xlsx", sheet='Defensive')
+offense2018 <- read_excel("cyclonesFootball2018.xlsx", sheet='Offensive')
+biography2018 <- read_excel("cyclonesFootball2018.xlsx", sheet='Biography')
+```
+Although the three Excel sheets are loaded into R, they are not useful before some cleaning. Manipulate the three imported data frames, so that in the cleaned dataset:
+
+1. The player names and opponent names are factors.
+```{r message=FALSE,warning=FALSE}
+defClean <- defense %>% 
+  mutate_at(c('Name', 'Opponent_Opponent'), factor)
+
+offClean <- offense %>% 
+  mutate_at(c('Name', 'Opponent_Opponent'), factor)
+
+bioClean <- biography %>%
+  mutate_at(c('Name'), factor)
+
+str(defClean)
+str(offClean)
+str(bioClean)
+```
+
+2. All offensive and defensive statistics are numerical. The Weight column in biogrpahy is also numeric. (Optional: Learn to mutate multiple columns systematically using the ?across function in `dplyr)
+```{r message=FALSE,warning=FALSE}
+defClean <- defClean %>%
+  mutate(across(where(is.character), as.numeric))
+
+offClean <- offClean %>%
+  mutate(across(where(is.character), as.numeric))
+offClean[is.na(offClean)]=0
+  
+bioClean <- bioClean %>%
+  mutate(Weight=as.numeric(Weight))
+
+str(defClean)
+str(offClean)
+str(bioClean)
+```
+
+
+3. Change the Height column in biogrpahy into numeric. (Hint: Use a unit that works well)
+```{r message=FALSE,warning=FALSE}
+bioClean <- bioClean %>%
+  separate(Height, c("foot","inch"), sep="-") %>%
+  mutate(foot=as.numeric(foot)) %>%
+  mutate(inch=as.numeric(inch))
+str(bioClean)
+```
+
+## Part two: Tidying
+
+For the following questions, work on the cleaned data frames defClean, offClean, and bioClean.
+
+1. Reformat the defClean data frame into a tidy format using pivot_longer. The type of statistic (Tackles_Solo, Tackles_ASST, etc) is added as a new key column named stat.
+```{r message=FALSE,warning=FALSE}
+defClean <- defClean %>%
+  pivot_longer(cols=Tackles_Solo:Pass_PB, names_to='stat')
+
+str(defClean)
+```
+
+2. Compare the distributions of the defensive statistics. What defensive skills are rare?
+```{r message=FALSE,warning=FALSE}
+ggplot(defClean,aes(x=value)) + geom_bar() + facet_wrap(~stat)
+```
+
+    I think Pass_PB, Pass_QBH, Tackles_Sack, Turnover_FF, Turnover_FR, and Turnover_INT are rare defensive skills because the number of people who have a good value for these skills are few.
+
+3. Did ISU have better defense against Iowa or Notre Dame? Answer this question by creating a scatterplot with x- and y-axes being the number of solo tackles (of each player). A large number of solo tackles is an indicator of good defense.
+```{r message=FALSE,warning=FALSE}
+defClean1<-defClean %>%
+  filter(Opponent_Opponent %in% c('Iowa', 'Notre Dame'), stat=='Tackles_Solo')
+
+ggplot(defClean1,aes(x=value,y=Name,color=Opponent_Opponent)) + geom_point()
+```
+
+    In general, ISU have better defense against Notre Dame because more players have more solo tackles against Notre Dame than against Iowa.
+
+Now turn our attention to the player biography.
+
+4. Separate the Hometown column into two columns, namely the city and the state. Print the first few rows of these two columns. (Hint: look at the sep= argument of separate)
+```{r message=FALSE,warning=FALSE}
+bioClean <- bioClean %>%
+  separate(Hometown, c("city","state"), sep=",")
+head(bioClean)
+```
+
+
+5. How many players are there from each state?
+```{r message=FALSE,warning=FALSE}
+bioClean %>%
+  group_by(state) %>%
+  summarise(StateSUM=n()) %>%
+  arrange(StateSUM)
+```
+
+
+## Part three: Joining data frames
+
+1. Find which states do the ISU defensive and offensive players come from. Create an appropriate summary.
+```{r message=FALSE,warning=FALSE}
+offClean %>%
+  select(Name) %>%
+  distinct() %>%
+  left_join(bioClean, by=c("Name"))%>%
+  group_by(state) %>%
+  drop_na() %>%
+  summarise(StateSUM=n()) %>%
+  arrange(StateSUM)
+
+defClean %>%
+  select(Name) %>%
+  distinct() %>%
+  left_join(bioClean, by=c("Name"))%>%
+  group_by(state) %>%
+  drop_na() %>%
+  summarise(StateSUM=n()) %>%
+  arrange(StateSUM)
+```
+
+
+2. How does the performance of quarterback Brock Purdy relate to the performance of the ISU team?
+```{r message=FALSE,warning=FALSE}
+BROCK <- offClean[offClean$Name=='Purdy, Brock',]
+
+BROCK1 <- BROCK %>%
+  select(c(Opponent_Opponent, Rushing_YDS)) 
+
+ggplot(BROCK1,aes(y=Opponent_Opponent,weight=Rushing_YDS)) + geom_bar()
+
+offClean %>%
+  select(Opponent_Opponent, Rushing_YDS)%>%
+  group_by(Opponent_Opponent) %>%
+  drop_na() %>%
+  ggplot(aes(y=Opponent_Opponent,weight=Rushing_YDS)) + geom_bar()
+```
+
+    Since Brock Purdy is an offensive player, I compared his personal and team rush distance to see how does his offensive performance attect the team. First plot is the plot of his personal rush distance in each game, second plot is the team rush distance in each game. In general, in the games that he has a good play like against ULM, TCU, and Oklahome, the team's rush distence is high too. In the games he does not play well, sometime team will have a good rush distance, sometime will not. So this player's individual performance still plays a certain positive role to the team's performance.
+
+3. Which ISU player(s) made big progress over the last year? Compare the 2019 and the 2018 data here.
+```{r message=FALSE,warning=FALSE}
+defClean2018 <- defense2018 %>% 
+  mutate_at(c('Name', 'Opponent_Opponent'), factor)%>%
+  mutate(across(where(is.character), as.numeric))%>%
+  pivot_longer(Tackles_Solo:Pass_PB, names_to='stat')
+
+offClean2018 <- offense2018 %>% 
+  mutate_at(c('Name', 'Opponent_Opponent'), factor)%>%
+  mutate(across(where(is.character), as.numeric))
+offClean2018[is.na(offClean2018)]=0
+
+offpoint2018 <- offClean2018 %>%
+  mutate(sum = Receiving_REC	+ Receiving_YDS + Receiving_TD + Rushing_ATT + Rushing_YDS + Rushing_TD + `Passing_CMP-ATT` + Passing_YDS+ Passing_TD+Passing_INT) %>%
+  select(Name, sum) %>%
+  group_by(Name) %>%
+  drop_na() %>%
+  summarise(point2018=sum(sum))
+
+offpoint2019 <- offClean %>%
+  mutate(sum = Receiving_REC	+ Receiving_YDS + Receiving_TD + Rushing_ATT + Rushing_YDS + Rushing_TD + `Passing_CMP-ATT` + Passing_YDS+ Passing_TD+Passing_INT) %>%
+  select(Name, sum) %>%
+  group_by(Name) %>%
+  drop_na() %>%
+  summarise(point2019=sum(sum))
+
+dat1<-inner_join(offpoint2018,offpoint2019,by='Name')%>%
+  mutate(Increase= point2019 - point2018)
+
+ggplot(dat1,aes(y=Name,weight=Increase)) + geom_bar()
+
+def2018<-defClean2018 %>%
+  select(Name,value)%>%
+  group_by(Name)%>%
+  drop_na()%>%
+  summarise(point2018=sum(value))
+
+def2019<-defClean %>%
+  select(Name,value)%>%
+  mutate(value=as.numeric(value))%>%
+  group_by(Name)%>%
+  drop_na()%>%
+  summarise(point2019=sum(value))
+
+dat4<-inner_join(def2018,def2019,by='Name') %>%
+  mutate(Increase= point2019 - point2018)
+
+ggplot(dat4,aes(y=Name,weight=Increase)) + geom_bar()
+
+```
+
+    I compare the comprehensive capacity value of players who play in ISU team for both 2018 and 2019 year. Based on the first plot we can see Brock Purdy made the biggest progress over the last year as a offensive player. Based on the second plot, we can see O`Rien Viance made the biggest progress over the last year as a defence player.
